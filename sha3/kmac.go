@@ -48,15 +48,15 @@ type cshake struct {
 	header []byte
 }
 
-func newCShake128(outputLen int, functionName, customizationString []byte) *cshake {
+func newCShake(rate, outputLen int, functionName, customizationString []byte) *cshake {
 	if len(functionName) == 0 && len(customizationString) == 0 {
 		return &cshake{NewShake128().(*state), nil}
 	}
 	var header []byte
 	header = encodeString(header, functionName)
 	header = encodeString(header, customizationString)
-	header = bytepad(nil, header, 168)
-	return &cshake{&state{rate: 168, outputLen: outputLen, dsbyte: 0x04}, header}
+	header = bytepad(nil, header, rate)
+	return &cshake{&state{rate: rate, outputLen: outputLen, dsbyte: 0x04}, header}
 }
 
 type kmac struct {
@@ -65,14 +65,20 @@ type kmac struct {
 }
 
 func NewKMAC128(key []byte, outputLen int, customizationString []byte) hash.Hash {
-	k := &kmac{newCShake128(outputLen, []byte("KMAC"), customizationString), key}
+	k := &kmac{newCShake(168, outputLen, []byte("KMAC"), customizationString), key}
+	k.Reset()
+	return k
+}
+
+func NewKMAC256(key []byte, outputLen int, customizationString []byte) hash.Hash {
+	k := &kmac{newCShake(136, outputLen, []byte("KMAC"), customizationString), key}
 	k.Reset()
 	return k
 }
 
 func (k *kmac) Reset() {
 	k.Write(k.header)
-	k.Write(bytepad(nil, encodeString(nil, k.key), 168))
+	k.Write(bytepad(nil, encodeString(nil, k.key), k.state.rate))
 }
 
 func (k *kmac) Sum(b []byte) []byte {
