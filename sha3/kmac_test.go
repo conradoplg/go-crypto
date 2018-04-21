@@ -69,19 +69,32 @@ func TestKMAC(t *testing.T) {
 
 		data, _ := hex.DecodeString(test.data)
 		mac.Write(data)
-
 		computedTag := mac.Sum(nil)
 
 		if !bytes.Equal(tag, computedTag) {
 			t.Errorf("#%d: got %x, want %x", i, tag, computedTag)
 		}
 
+		// Test if it works after Reset.
 		mac.Reset()
 		mac.Write(data)
 		computedTag = mac.Sum(nil)
 
 		if !bytes.Equal(tag, computedTag) {
 			t.Errorf("#%d: got %x, want %x", i, tag, computedTag)
+		}
+
+		//Test if Sum does not change state.
+		if len(data) > 1 {
+			mac.Reset()
+			mac.Write(data[0:1])
+			mac.Sum(nil)
+			mac.Write(data[1:])
+			computedTag = mac.Sum(nil)
+
+			if !bytes.Equal(tag, computedTag) {
+				t.Errorf("#%d: got %x, want %x", i, tag, computedTag)
+			}
 		}
 	}
 }

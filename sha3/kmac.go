@@ -1,8 +1,23 @@
 package sha3
 
+// This file provides function for creating KMAC instances.
+// KMAC is a Message Authentication Code that based on Kaccak and
+// specified in NIST Special Publication 800-185, "SHA-3 Derived Functions:
+// cSHAKE, KMAC, TupleHash and ParallelHash".
+
 import (
 	"encoding/binary"
 	"hash"
+)
+
+const (
+	// According to NIST SP 800-185:
+	// "When used as a MAC, applications of this Recommendation shall
+	// not select an output length L that is less than 32 bits, and
+	// shall only select an output length less than 64 bits after a
+	// careful risk analysis is performed."
+	// 64 bits was selected for safety.
+	kmacMinimumTagSize = 8
 )
 
 func leftEncode(out hash.Hash, x int) int {
@@ -46,6 +61,7 @@ func bytepadEnd(out hash.Hash, written, w int) {
 	}
 }
 
+// cSHAKE is a customizable version of the SHAKE function.
 type cshake struct {
 	*state
 	initialState *state
@@ -71,15 +87,36 @@ type kmac struct {
 	*cshake
 }
 
+// NewKMAC128 returns a new KMAC hash providing 128 bits of security using
+// the given key, which must have 16 bytes or more, generating the given outputLen
+// bytes output and using the given customizationString.
+// Note that unlike other hash implementations in the standard library,
+// the returned Hash does not implement encoding.BinaryMarshaler
+// or encoding.BinaryUnmarshaler.
 func NewKMAC128(key []byte, outputLen int, customizationString []byte) hash.Hash {
+	if len(key) < 16 {
+		panic("Key must not be smaller than security strength")
+	}
 	return newKMAC(key, outputLen, customizationString, 168)
 }
 
+// NewKMAC256 returns a new KMAC hash providing 256 bits of security using
+// the given key, which must have 32 bytes or more, generating the given outputLen
+// bytes output and using the given customizationString.
+// Note that unlike other hash implementations in the standard library,
+// the returned Hash does not implement encoding.BinaryMarshaler
+// or encoding.BinaryUnmarshaler.
 func NewKMAC256(key []byte, outputLen int, customizationString []byte) hash.Hash {
+	if len(key) < 32 {
+		panic("Key must not be smaller than security strength")
+	}
 	return newKMAC(key, outputLen, customizationString, 136)
 }
 
 func newKMAC(key []byte, outputLen int, customizationString []byte, rate int) hash.Hash {
+	if outputLen < kmacMinimumTagSize {
+		panic("outputLen is too small")
+	}
 	c := newCShake(rate, outputLen, []byte("KMAC"), customizationString)
 	written := bytepadStart(c, c.rate)
 	written += encodeString(c, key)
