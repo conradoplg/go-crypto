@@ -5,58 +5,61 @@ import (
 	"hash"
 )
 
-func leftEncode(out []byte, x int) []byte {
+func leftEncode(out hash.Hash, x int) int {
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], uint64(x))
 	xLen := 1
 	for b[len(b)-xLen-1] != 0 && xLen < len(b) {
 		xLen++
 	}
-	out = append(out, byte(xLen))
-	return append(out, b[len(b)-xLen:]...)
+	out.Write([]byte{byte(xLen)})
+	out.Write(b[len(b)-xLen:])
+	return xLen + 1
 }
 
-func rightEncode(out []byte, x int) []byte {
+func rightEncode(out hash.Hash, x int) int {
 	var b [8]byte
 	binary.BigEndian.PutUint64(b[:], uint64(x))
 	xLen := 1
 	for b[len(b)-xLen-1] != 0 && xLen < len(b) {
 		xLen++
 	}
-	out = append(out, b[len(b)-xLen:]...)
-	return append(out, byte(xLen))
+	out.Write(b[len(b)-xLen:])
+	out.Write([]byte{byte(xLen)})
+	return xLen + 1
 
 }
 
-func encodeString(out, s []byte) []byte {
-	out = leftEncode(out, len(s)*8)
-	out = append(out, s...)
-	return out
+func encodeString(out hash.Hash, s []byte) int {
+	size := leftEncode(out, len(s)*8)
+	out.Write(s)
+	return size + len(s)
 }
 
-func bytepad(out, x []byte, w int) []byte {
-	out = leftEncode(out, w)
-	out = append(out, x...)
-	for len(out)%w != 0 {
-		out = append(out, 0)
+func bytepadStart(out hash.Hash, w int) int {
+	return leftEncode(out, w)
+}
+
+func bytepadEnd(out hash.Hash, written, w int) {
+	for ; written%w != 0; written++ {
+		out.Write([]byte{0})
 	}
-	return out
 }
 
 type cshake struct {
 	*state
-	header []byte
 }
 
 func newCShake(rate, outputLen int, functionName, customizationString []byte) *cshake {
 	if len(functionName) == 0 && len(customizationString) == 0 {
-		return &cshake{NewShake128().(*state), nil}
+		return &cshake{NewShake128().(*state)}
 	}
-	var header []byte
-	header = encodeString(header, functionName)
-	header = encodeString(header, customizationString)
-	header = bytepad(nil, header, rate)
-	return &cshake{&state{rate: rate, outputLen: outputLen, dsbyte: 0x04}, header}
+	s := &state{rate: rate, outputLen: outputLen, dsbyte: 0x04}
+	written := bytepadStart(s, rate)
+	written += encodeString(s, functionName)
+	written += encodeString(s, customizationString)
+	bytepadEnd(s, written, rate)
+	return &cshake{s}
 }
 
 type kmac struct {
@@ -77,12 +80,13 @@ func NewKMAC256(key []byte, outputLen int, customizationString []byte) hash.Hash
 }
 
 func (k *kmac) Reset() {
-	k.Write(k.header)
-	k.Write(bytepad(nil, encodeString(nil, k.key), k.state.rate))
+	written := bytepadStart(k, k.rate)
+	written += encodeString(k, k.key)
+	bytepadEnd(k, written, k.rate)
 }
 
 func (k *kmac) Sum(b []byte) []byte {
 	s := k.state.clone()
-	s.Write(rightEncode(nil, k.outputLen*8))
+	rightEncode(s, k.outputLen*8)
 	return s.Sum(b)
 }
