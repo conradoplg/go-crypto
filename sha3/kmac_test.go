@@ -75,5 +75,13 @@ func TestKMAC(t *testing.T) {
 		if !bytes.Equal(tag, computedTag) {
 			t.Errorf("#%d: got %x, want %x", i, tag, computedTag)
 		}
+
+		mac.Reset()
+		mac.Write(data)
+		computedTag = mac.Sum(nil)
+
+		if !bytes.Equal(tag, computedTag) {
+			t.Errorf("#%d: got %x, want %x", i, tag, computedTag)
+		}
 	}
 }
